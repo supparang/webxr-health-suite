@@ -1,0 +1,123 @@
+
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Germ Defender (Embed)</title>
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<style>html,body{margin:0;height:100%;overflow:hidden}</style>
+</head>
+<body>
+<a-scene renderer="antialias:true;physicallyCorrectLights:true" xr-mode-ui="enabled: true">
+  <a-entity light="type:ambient;intensity:0.8"></a-entity>
+  <a-entity light="type:directional;intensity:0.6" position="1 1 0"></a-entity>
+  <a-sky color="#eef2ff"></a-sky>
+  <a-text value="GERM DEFENDER" position="-0.8 2 -2" color="#111" width="4"></a-text>
+  <a-entity id="ui" position="0 1.45 -1.8">
+    <a-text id="status" value="คลิก START เพื่อเริ่ม (60 วิ)" color="#111" align="center" width="3.8"></a-text>
+  </a-entity>
+
+  <a-box id="act_wash" position="-1.2 1 -2" depth="0.2" height="0.4" width="0.9" color="#16a34a"></a-box>
+  <a-text value="ล้างมือ" position="-1.55 1.02 -1.8" color="#fff" width="3"></a-text>
+
+  <a-box id="act_mask" position="0 1 -2" depth="0.2" height="0.4" width="0.9" color="#0ea5e9"></a-box>
+  <a-text value="หน้ากาก" position="-0.35 1.02 -1.8" color="#fff" width="3"></a-text>
+
+  <a-box id="act_drink" position="1.2 1 -2" depth="0.2" height="0.4" width="0.9" color="#f59e0b"></a-box>
+  <a-text value="ดื่มน้ำ" position="0.85 1.02 -1.8" color="#fff" width="3"></a-text>
+
+  <a-box id="start" position="0 0.5 -2" depth="0.2" height="0.4" width="1.2" color="#4f46e5"></a-box>
+  <a-text value="START" position="-0.3 0.52 -1.8" color="#fff" width="3"></a-text>
+
+  <a-entity id="spawner"></a-entity>
+
+  <a-entity position="0 1.6 0">
+    <a-camera wasd-controls-enabled="true"></a-camera>
+  </a-entity>
+</a-scene>
+
+<script>
+const DURATION = 60;
+let started=false, t0=0, timer=null, score=0, correct=0, wrong=0;
+function post(type, extra={}){ try{ parent.postMessage(Object.assign({type}, extra), '*'); }catch(e){} }
+
+const statusEl = document.getElementById('status');
+const spawner = document.getElementById('spawner');
+const startBtn = document.getElementById('start');
+const pad = { wash: document.getElementById('act_wash'), mask: document.getElementById('act_mask'), drink: document.getElementById('act_drink') };
+
+const GERMS = [
+  { kind:'g1', needs:'wash', color:'#ef4444' },
+  { kind:'g2', needs:'mask', color:'#06b6d4' },
+  { kind:'g3', needs:'drink', color:'#f59e0b' }
+];
+function randomRange(a,b){ return a + Math.random()*(b-a); }
+function spawn(){
+  if(!started) return;
+  const now = (performance.now()-t0)/1000;
+  const count = Math.min(1 + Math.floor(now/10), 4);
+  for(let i=0;i<count;i++){
+    const g = GERMS[Math.floor(Math.random()*GERMS.length)];
+    const x = randomRange(-1.5, 1.5);
+    const y = randomRange(0.8, 1.6);
+    const e = document.createElement('a-sphere');
+    e.setAttribute('radius', 0.12);
+    e.setAttribute('color', g.color);
+    e.setAttribute('position', `${x} ${y} -4.5`);
+    e.setAttribute('germ', g.needs);
+    spawner.appendChild(e);
+    const speed = 0.5 + now/30;
+    const intv = setInterval(()=>{
+      if(!e.parentNode) { clearInterval(intv); return; }
+      const p = e.getAttribute('position');
+      p.z += (speed*0.03);
+      e.setAttribute('position', p);
+      if(p.z >= -2.1){
+        wrong++; e.parentNode.removeChild(e); clearInterval(intv);
+      }
+    }, 16);
+  }
+}
+function pulse(el){ el.setAttribute('scale', '1.05 1.05 1.05'); setTimeout(()=>el.setAttribute('scale','1 1 1'), 120); }
+function onAction(kind){
+  if(!started) return;
+  pulse(pad[kind]);
+  const list = Array.from(spawner.children);
+  for(const e of list){
+    const need = e.getAttribute('germ');
+    const p = e.getAttribute('position');
+    if(p.z>-2.3 && p.z<-1.8 && Math.abs(p.x - (kind==='wash'?-1.2:kind==='mask'?0:1.2)) < 0.9){
+      if(need===kind){ correct++; score+=10; } else { wrong++; }
+      e.parentNode.removeChild(e); break;
+    }
+  }
+}
+pad.wash.addEventListener('click', ()=>onAction('wash'));
+pad.mask.addEventListener('click', ()=>onAction('mask'));
+pad.drink.addEventListener('click', ()=>onAction('drink'));
+
+startBtn.addEventListener('click', ()=>{
+  if(started) return;
+  started=true; score=0; correct=0; wrong=0;
+  t0=performance.now();
+  statusEl.setAttribute('value','กำลังเล่น...');
+  post('GERM_READY');
+  timer = setInterval(()=>{
+    const elapsed = Math.floor((performance.now()-t0)/1000);
+    const remain = Math.max(0, DURATION - elapsed);
+    statusEl.setAttribute('value', `เหลือเวลา ${remain}s | ✔${correct} ✖${wrong} | คะแนน ${score}`);
+    if(remain<=0){
+      started=false; clearInterval(timer);
+      Array.from(spawner.children).forEach(ch=>ch.parentNode.removeChild(ch));
+      const seconds = Math.round((performance.now()-t0)/1000);
+      post('GERM_COMPLETE', { score, seconds, correct, wrong });
+      alert('จบ Germ Defender! คะแนน '+score);
+    }else{
+      spawn();
+    }
+  }, 1000);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Healthy Food Rush (Embed)</title>
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<style>html,body{margin:0;height:100%;overflow:hidden}</style>
+</head>
+<body>
+<a-scene renderer="antialias:true;physicallyCorrectLights:true" xr-mode-ui="enabled: true">
+  <a-entity light="type:ambient;intensity:0.8"></a-entity>
+  <a-entity light="type:directional;intensity:0.6" position="1 1 0"></a-entity>
+  <a-sky color="#ecfeff"></a-sky>
+
+  <a-text value="HEALTHY FOOD RUSH" position="-0.9 2 -2" color="#111" width="4"></a-text>
+  <a-entity id="ui" position="0 1.45 -1.8">
+    <a-text id="status" value="คลิก START เพื่อเริ่ม (3 รอบ รอบละ 20 วิ)" color="#111" align="center" width="3.8"></a-text>
+  </a-entity>
+
+  <a-box id="basket_good" position="-0.8 1 -2" depth="0.2" height="0.4" width="1.2" color="#16a34a"></a-box>
+  <a-text value="สุขภาพดี" position="-1.25 1.02 -1.8" color="#fff" width="3"></a-text>
+
+  <a-box id="basket_bad" position="0.8 1 -2" depth="0.2" height="0.4" width="1.2" color="#ef4444"></a-box>
+  <a-text value="ควรเลี่ยง" position="0.35 1.02 -1.8" color="#fff" width="3"></a-text>
+
+  <a-box id="start" position="0 0.5 -2" depth="0.2" height="0.4" width="1.2" color="#4f46e5"></a-box>
+  <a-text value="START" position="-0.3 0.52 -1.8" color="#fff" width="3"></a-text>
+
+  <a-entity id="spawner"></a-entity>
+
+  <a-entity position="0 1.6 0"><a-camera wasd-controls-enabled="true"></a-camera></a-entity>
+</a-scene>
+
+<script>
+let started=false, round=0, score=0, correct=0, wrong=0, t0=0, timer=null;
+const ROUND_SEC=20, TOTAL_ROUNDS=3;
+function post(type, extra={}){ try{ parent.postMessage(Object.assign({type}, extra),'*'); }catch(e){} }
+
+const FOODS = [
+  {name:'Apple', type:'good', color:'#22c55e'},
+  {name:'Banana', type:'good', color:'#84cc16'},
+  {name:'Carrot', type:'good', color:'#f97316'},
+  {name:'Milk', type:'good', color:'#60a5fa'},
+  {name:'Sweet Milk', type:'bad', color:'#f472b6'},
+  {name:'Sugary Juice', type:'bad', color:'#f43f5e'},
+  {name:'Soda', type:'bad', color:'#ef4444'},
+  {name:'Chips', type:'bad', color:'#a855f7'},
+  {name:'Candy', type:'bad', color:'#eab308'}
+];
+
+const spawner=document.getElementById('spawner');
+const statusEl=document.getElementById('status');
+document.getElementById('start').addEventListener('click', ()=>startRound());
+
+function spawn(speedScale){
+  const f = FOODS[Math.floor(Math.random()*FOODS.length)];
+  const x = -2.0, y = 1 + Math.random()*0.8;
+  const e = document.createElement('a-box');
+  e.setAttribute('width','0.25'); e.setAttribute('height','0.25'); e.setAttribute('depth','0.25');
+  e.setAttribute('color', f.color);
+  e.setAttribute('food', f.type);
+  e.setAttribute('title', f.name);
+  e.setAttribute('position', `${x} ${y} -3`);
+  spawner.appendChild(e);
+  const speed = 0.01 + 0.01*speedScale + Math.random()*0.01;
+  const intv=setInterval(()=>{
+    if(!e.parentNode){ clearInterval(intv); return; }
+    const p=e.getAttribute('position');
+    p.x += speed*3.0;
+    e.setAttribute('position', p);
+    if(p.x> -1.2 && p.x< -0.4 && p.z>-2.3 && p.z<-1.8){
+      if(e.getAttribute('food')==='good') {{ correct++; score+=10; }} else {{ wrong++; score-=5; }}
+      e.parentNode.removeChild(e); clearInterval(intv);
+    } else if(p.x> 0.4 && p.x< 1.2 && p.z>-2.3 && p.z<-1.8){
+      if(e.getAttribute('food')==='bad') {{ correct++; score+=10; }} else {{ wrong++; score-=5; }}
+      e.parentNode.removeChild(e); clearInterval(intv);
+    } else if(p.x > 2.2){
+      if(e.getAttribute('food')==='good'){ wrong++; score-=3; }
+      e.parentNode.removeChild(e); clearInterval(intv);
+    }
+  }, 16);
+  e.addEventListener('click', ()=>{
+    const type=e.getAttribute('food');
+    if(type==='good'){ score+=5; correct++; } else { score-=5; wrong++; }
+    e.parentNode && e.parentNode.removeChild(e);
+  });
+}
+
+function startRound(){
+  if(started) return;
+  started=true; round=1; score=0; correct=0; wrong=0;
+  t0=performance.now(); post('FOOD_READY');
+  playRound();
+}
+function playRound(){
+  const roundStart=performance.now();
+  const speedScale=round-1;
+  statusEl.setAttribute('value', `รอบ ${round}/${TOTAL_ROUNDS} กำลังเล่น...`);
+  timer=setInterval(()=>{
+    const elapsed=(performance.now()-roundStart)/1000;
+    const remain=Math.max(0, {ROUND_SEC} - elapsed);
+    statusEl.setAttribute('value', `รอบ ${round}/${TOTAL_ROUNDS} เหลือ ${Math.ceil(remain)}s | ✔${correct} ✖${wrong} | คะแนน ${score}`);
+    if(Math.random()<0.6) spawn(speedScale);
+    if(remain<=0){
+      clearInterval(timer);
+      Array.from(spawner.children).forEach(ch=>ch.parentNode.removeChild(ch));
+      if(round < {TOTAL_ROUNDS}){ round++; playRound(); }
+      else{
+        started=false;
+        const seconds = Math.round((performance.now()-t0)/1000);
+        post('FOOD_COMPLETE', { score, seconds, correct, wrong });
+        alert('จบ Healthy Food Rush! คะแนน '+score);
+      }
+    }
+  }, 300);
+}
+</script>
+</body>
+</html>

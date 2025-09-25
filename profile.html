@@ -1,0 +1,67 @@
+
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Student Profile — Progress & Stats</title>
+<link rel="stylesheet" href="./assets/css/style.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <h1>โปรไฟล์ผู้เรียน — กราฟความก้าวหน้า</h1>
+  <div class="card">
+    <div class="row" style="grid-template-columns:repeat(4,1fr)">
+      <div><div class="label">Student ID</div><input id="sid" placeholder="STD001"/></div>
+      <div><div class="label">ชื่อ–สกุล</div><input id="name" disabled/></div>
+      <div><div class="label">ห้อง</div><input id="classId" disabled/></div>
+      <div><div class="label">โรงเรียน</div><input id="school" disabled/></div>
+    </div>
+    <div class="controls">
+      <button id="loadLocal" class="btn">โหลดจากเครื่องนี้</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📈 กราฟคะแนนรวม & เกมที่จบ</h2>
+    <canvas id="sumChart" height="120"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>🎮 สถิติรายเกม</h2>
+    <table class="table" id="tblGames">
+      <thead><tr><th>เกม</th><th>Sessions</th><th>Completions</th><th>Best Score</th><th>Best Time (s)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>🏅 Badges</h2>
+    <div id="badges"></div>
+  </div>
+
+  <div class="footer">© Student Profile</div>
+</div>
+
+<script>
+function $(q){ return document.querySelector(q); }
+function loadLocal(sid){ try{ const d=JSON.parse(localStorage.getItem('healthCloud_badges_v3'))||{students:{}}; return d.students[sid]||null; }catch(e){ return null; } }
+const gameNames = {handwash:'Handwash', nutrition:'Nutrition', dance:'Dance', toothbrush:'Toothbrush', hydration:'Hydration', balance:'Balance', germdefender:'Germ Defender', foodrush:'Food Rush'};
+let chart=null;
+function render(stu){
+  if(!stu){ alert('ไม่พบข้อมูลนักเรียน'); return; }
+  $('#name').value=stu.name||''; $('#classId').value=stu.classId||''; $('#school').value=stu.school||'';
+  const ctx=$('#sumChart').getContext('2d'); const labels=['Points','Completions','Badge Bonus'];
+  const data=[(stu.totals&&stu.totals.points)||0,(stu.totals&&stu.totals.comps)||0,(stu.totals&&stu.totals.badgeBonus)||0];
+  if(chart) chart.destroy(); chart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Summary',data}]} ,options:{responsive:true}});
+  const tb=$('#tblGames tbody'); tb.innerHTML=''; const games=stu.games||{};
+  for(const k of Object.keys(games)){ const g=games[k]; const tr=document.createElement('tr'); tr.innerHTML=`<td>${gameNames[k]||k}</td><td>${g.sessions||0}</td><td>${g.completions||0}</td><td>${g.bestScore||0}</td><td>${g.bestTime??''}</td>`; tb.appendChild(tr); }
+  const wrap=$('#badges'); wrap.innerHTML=''; const b=stu.badges||{}; const keys=Object.keys(b); if(keys.length===0){ wrap.innerHTML='<span class="small">ยังไม่มีแบดจ์</span>'; return; }
+  keys.forEach(id=>{ const el=document.createElement('span'); el.className='badge'; el.textContent=b[id].label + (b[id].bonus? ` (+${b[id].bonus})`:''); wrap.appendChild(el); });
+}
+document.getElementById('loadLocal').addEventListener('click',()=>{ const sid=$('#sid').value.trim(); const stu=loadLocal(sid); render(stu); });
+const params=new URLSearchParams(location.search); const sid=params.get('sid')||''; $('#sid').value=sid; if(sid){ const stu=loadLocal(sid); if(stu) render(stu); }
+</script>
+</body>
+</html>

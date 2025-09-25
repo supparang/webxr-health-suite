@@ -1,0 +1,68 @@
+
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>School Dashboard</title>
+<link rel="stylesheet" href="./assets/css/style.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <h1>School Dashboard — กราฟรวม & ตารางทุกห้อง</h1>
+  <div class="card">
+    <div class="row" style="grid-template-columns:repeat(2,1fr)">
+      <div><div class="label">School</div><input id="school" placeholder="BKK School"/></div>
+      <div><div class="label">Top N</div><input id="topN" type="number" value="30"/></div>
+    </div>
+    <div class="controls">
+      <button id="load" class="btn">โหลดข้อมูล</button>
+      <button id="export" class="btn secondary">Export Excel</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📈 กราฟคะแนน Top N</h2>
+    <canvas id="chart" height="140"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>📋 ตารางทั้งโรงเรียน</h2>
+    <table class="table" id="tbl">
+      <thead><tr><th>อันดับ</th><th>SID</th><th>ชื่อ</th><th>ห้อง</th><th>คะแนน</th><th>เกมจบ</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+<script>
+function $(q){ return document.querySelector(q); }
+async function fetchSchool(){
+  try{
+    const readUrl = (window.opener && window.opener.HealthSuiteConfig && window.opener.HealthSuiteConfig.sheets.readUrl) || '';
+    if(!readUrl){ alert('เปิดจาก Hub หรือระบุ readUrl ใน config.js'); return null; }
+    const sch=$('#school').value.trim();
+    const url = readUrl + (readUrl.includes('?')?'&':'?') + 'scope=school&school='+encodeURIComponent(sch);
+    const res=await fetch(url); return await res.json();
+  }catch(e){ alert('โหลดไม่ได้: '+e.message); return null; }
+}
+let chart=null;
+function render(rows){
+  rows.sort((a,b)=> (b.points||0)-(a.points||0));
+  const topN=parseInt($('#topN').value||'30',10);
+  const top=rows.slice(0,topN);
+  const ctx=$('#chart').getContext('2d');
+  if(chart) chart.destroy();
+  chart=new Chart(ctx,{type:'bar',data:{labels:top.map(x=>(x.name||x.sid)+' ('+(x.classId||'')+')'),datasets:[{label:'Points',data:top.map(x=>x.points||0)}]},options:{responsive:true}});
+  const tb=$('#tbl tbody'); tb.innerHTML=''; top.forEach((r,i)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${i+1}</td><td>${r.sid}</td><td>${r.name}</td><td>${r.classId}</td><td>${r.points}</td><td>${r.comps}</td>`; tb.appendChild(tr); });
+}
+document.getElementById('load').addEventListener('click', async ()=>{ const js=await fetchSchool(); if(js&&js.rows) render(js.rows); });
+document.getElementById('export').addEventListener('click', ()=>{
+  const tb=document.querySelector('#tbl'); const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.table_to_sheet(tb); XLSX.utils.book_append_sheet(wb, ws, 'School');
+  XLSX.writeFile(wb, 'SchoolDashboard.xlsx');
+});
+</script>
+</body>
+</html>
